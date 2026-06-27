@@ -92,7 +92,13 @@ async def _run_webhook(app: Application) -> None:
     aio.router.add_get("/healthz", healthz)
     aio.router.add_post(url_path, telegram)
 
-    # Bring PTB up.
+    # Open the DB pool BEFORE Application.initialize() so handlers can see it
+    # immediately on the first update. We do it explicitly here rather than via
+    # post_init because post_init only runs through PTB's own run_polling /
+    # run_webhook, not when we drive initialize()/start() ourselves.
+    pool = await db.init_pool()
+    app.bot_data["pool"] = pool
+
     await app.initialize()
     if public_url:
         webhook_url = f"{public_url}{url_path}"
@@ -133,6 +139,7 @@ async def _run_webhook(app: Application) -> None:
         await runner.cleanup()
         await app.stop()
         await app.shutdown()
+        await db.close_pool(pool)
 
 
 def main() -> None:
