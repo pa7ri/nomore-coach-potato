@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: nomore-coach-potato
+    runtime: python
+    plan: free
+    buildCommand: pip install -e .
+    startCommand: python -m app.main
+    healthCheckPath: /healthz
+    envVars:
+      - key: MODE
+        value: webhook
+      - key: TIMEZONE
+        value: Europe/Madrid
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_CHAT_IDS
+        sync: false
