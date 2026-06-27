@@ -61,12 +61,15 @@ def _build_app() -> Application:
 async def _run_webhook(app: Application) -> None:
     """Initialize PTB, set the webhook on Telegram's side, then run an aiohttp
     server until SIGTERM/SIGINT. Updates are pushed into PTB via update_queue.
+
+    Tolerates a missing PUBLIC_URL on boot: serves /healthz so Render's health
+    check passes, and skips set_webhook until the env var is filled in. This
+    means the very first deploy (before you know the URL) can land healthy.
     """
-    public_url = os.environ["PUBLIC_URL"].rstrip("/")
+    public_url = os.environ.get("PUBLIC_URL", "").rstrip("/")
     secret = os.environ["WEBHOOK_SECRET"]
     port = int(os.environ.get("PORT", "8080"))
     url_path = f"/telegram/{secret}"
-    webhook_url = f"{public_url}{url_path}"
 
     async def healthz(_request: web.Request) -> web.Response:
         return web.Response(text="ok")
@@ -91,13 +94,21 @@ async def _run_webhook(app: Application) -> None:
 
     # Bring PTB up.
     await app.initialize()
-    await app.bot.set_webhook(
-        url=webhook_url,
-        secret_token=secret,
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=False,
-    )
-    log.info("webhook set: %s", webhook_url)
+    if public_url:
+        webhook_url = f"{public_url}{url_path}"
+        await app.bot.set_webhook(
+            url=webhook_url,
+            secret_token=secret,
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=False,
+        )
+        log.info("webhook set: %s", webhook_url)
+    else:
+        log.warning(
+            "PUBLIC_URL not set — skipping set_webhook. "
+            "/healthz will still respond so the service stays healthy. "
+            "Set PUBLIC_URL to your Render URL and redeploy to start receiving updates."
+        )
     await app.start()
 
     runner = web.AppRunner(aio)
